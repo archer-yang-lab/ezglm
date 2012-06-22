@@ -1,7 +1,7 @@
 \name{ezglm}
 \alias{ezglm}
-\title{selects significant non-additive interaction between two variables using fast GLM implementation.}
-\description{selects significant non-additive interaction between two variables using fast GLM implementation.}
+\title{Selects a significant non-additive interaction between two variables using a fast GLM implementation.}
+\description{Selects a significant non-additive interaction between two variables using a fast GLM implementation.}
 \usage{
 ezglm(y, x1, x2, thr = 1, family=c("gaussian","binomial"))
 }
@@ -21,11 +21,10 @@ ezglm(y, x1, x2, thr = 1, family=c("gaussian","binomial"))
 Motivated by pairwise gene interaction selection in genome-wide association study (GWAS),
 this package implements fast and simplified least squares,
 and logistic regression for efficiently selecting
-the significant non-additive interactions between two variables.
-Once a user specifies a reponse variable \code{y} and predictors \code{x1} and \code{x2},
-for \code{"gaussian"} a least squares model \code{y ~ x1 + x2 + x1*x2} is fitted;
-for \code{"binomial"} a logistic regression \code{logit ~ x1 + x2 + x1*x2} is fitted.
-Users can then select significant x1*x2 term using returned p-value of Wald test.
+a significant non-additive interaction between two variables.
+Once user specifies the response variable \code{y} and predictors \code{x1} and \code{x2},
+then  a least squares model (\code{"gaussian"}) \code{y ~ x1 + x2 + x1*x2} or a logistic regression (\code{"binomial"}) \code{logit ~ x1 + x2 + x1*x2} is fitted.
+Users can then select the significant x1*x2 term using returned Wald test p-value.
 }
 
 
