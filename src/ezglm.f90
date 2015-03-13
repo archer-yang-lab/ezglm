@@ -1,43 +1,4 @@
 !#####################################################################
-module program_constants
-   ! Programming constants used throughout the ELOGIT program.
-   ! Unlike most modules, everything here is public.
-   implicit none
-   public
-   ! Define compiler-specific KIND numbers for integers,
-   ! single and double-precision reals to help ensure consistency of
-   ! performance across platforms:
-   integer, parameter :: our_int = selected_int_kind(9), &
-        our_sgle = selected_real_kind(6,37), &
-        our_dble = SELECTED_REAL_KIND(12,80)
-   ! Define UNIT numbers for Fortran I/O:
-   integer, parameter :: ctrl_file_handle = 11, &
-        data_file_handle = 12, names_file_handle = 13, &
-        out_file_handle = 13
-   ! Define maximum lengths for various types of character strings:
-   integer, parameter :: file_name_length = 256, &
-        var_name_length = 8, case_id_length = 8
-   ! Define the maximum line widths for various types of files:
-   integer, parameter :: ctrl_line_width = 80, &
-        data_line_width = 1024, names_line_width = 80, &
-        out_line_width = 70
-   ! Common integer values returned by all functions to indicate
-   ! success or failure:
-   integer(kind=our_int), parameter :: RETURN_SUCCESS = 0, &
-        RETURN_FAIL = -1
-   ! Character strings describing this program:
-   character(len=*), parameter :: &
-        program_name = "ELOGIT", &
-        program_description = &
-        "A simple program for logistic regression analysis", &
-        program_version = "Version 1.0", &
-        program_version_and_date = "Version 1.0 - June, 2004", &
-        program_author = "Written by J.L. Schafer", &
-        program_institution_1 = &
-        "Department of Statistics and The Methodology Center", &
-        program_institution_2 = "The Pennsylvania State University"
-end module program_constants
-!#####################################################################
 function alnorm ( x, upper )
 
 !*****************************************************************************80
@@ -502,6 +463,382 @@ subroutine nprob ( z, p, q, pdf )
   return
 end
 
+
+!     Last change:  SEJ  30 Apr 2002    6:43 pm
+!---------------------------------------------------------
+!!    Donor:   Egon J. Szondi
+!!    Email:   szondi@reak.bme.hu
+!!    Purpose: testing the real function chi2func
+!---------------------------------------------------------
+!     Magyar karakterek: MS-DOS text * Hungarian characters: MS-DOS text
+!
+!+ chi2 eloszl†s * chi2 distribution
+!
+MODULE chi2dist
+!
+! Le°r†s * Description:
+!   A chi2 eloszl†s eloszl†sfÅggvÇnyÇnek Çs sñrñsÇgfÅggvÇnyÇnek sz†m°t†sa.
+!   Calculation of the distribution function and the distribution density 
+!   function of the chi2 distribution.
+!
+! Current Code Owner: Szondi, Egon J†nos
+!                     Alkotas u. 35. fsz. 6.
+!                     H-1123 Budapest, Hungary
+!
+! History:
+! Version   Date         Comment
+! -------   ----         -------
+! 1.00      April 2002.  Original code. Szondi, E. J.
+!
+! Code Description:
+!   Language:    Fortran 90.
+!   Software Standards: "European Standards for Writing and
+!     Documenting Exchangeable Fortran 90 Code".
+!
+IMPLICIT NONE
+PRIVATE
+PUBLIC chi2func
+INTEGER, PARAMETER :: dp=SELECTED_REAL_KIND(12,80)
+!
+CONTAINS
+!
+!+ chi2 sz†m°t†sa * calculation of chi2
+!
+SUBROUTINE chi2func(x,n,p,s,h)
+!
+! Le°r†s * Description:
+!   Adott n-hez Çs x-hez kisz†molja a p Çs/vagy s ÇrtÇkÇt.
+!   Calculates the value(s) of p and/or s to given n and x.
+!
+! M¢dszer * Method:
+!   R. E. Bargmann, S. P. Gosh: Statistical distribution programs 
+!   for a computer language. IBM Research Report RC-1094. 1963.
+!   See in: IBM System/360 Fortran IV Scientific Subroutine Package (SSP)
+!
+double precision , INTENT (IN) ::      x        ! argumentum
+INTEGER, INTENT (IN) ::   n        ! szabads†gfok * degree of freedom
+double precision, INTENT (OUT), OPTIONAL :: &
+                          p,    &  ! val¢sz°nñsÇg * probability
+                          s        ! sñrñsÇg * probability density
+INTEGER, INTENT (OUT), OPTIONAL :: &
+                          h        ! hibak¢d * error code
+                                   !  0 = nincs hiba * no error
+                                   ! -1 = x<0, g<1, g>20000 (p=s=-big)
+                                   ! +1 = divergencia, p=+big
+                                   ! -2 = p Çs s hi†nyzik * missing p and s
+                                   ! ahol * where: big=HUGE(x)/100
+REAL (dp) :: xx,dlxx,x2,dlx2,gg,g2,dlt3,theta,thp1,               &
+  glg2,dd,t11,ser,cc,xi,fac,tlog,term,gth,a2,a,b,c,dt2,dt3,thpi
+double precision  :: lp,g,sc,t1,t2,t3,big,t
+INTEGER :: lh,i,i3,it1,j,k
+LOGICAL :: limit_check,pp,ps,ph
+CHARACTER (30) :: args
+REAL (dp), PARAMETER :: lnh=168_dp ! EXP(lnh)=9.15e72 (=IBM System/360 HUGE/100)
+CHARACTER (*), PARAMETER :: chi2f=' chi2func * '
+CHARACTER (*), PARAMETER :: diver=' divergent expansion'
+CHARACTER (*), PARAMETER :: illeg=' illegal argument(s)'
+CHARACTER (*), PARAMETER :: argsf='("n=",i10," x=",es15.7)'
+CHARACTER (*), PARAMETER :: nincs='nincs feladat * nothing to do'
+!
+pp=PRESENT(p)
+ps=PRESENT(s)
+ph=PRESENT(h)
+!
+IF (.NOT.pp.AND..NOT.ps) THEN
+  IF (ph) THEN
+    h=-2
+  ELSE
+    ! standard Fortran 90/95
+    WRITE (*,*) chi2f//nincs
+    ! Lahey Fortran 90/95; compiler switch: -trace
+    ! CALL ERROR(chi2f//nincs)
+  END IF
+  RETURN
+END IF
+!
+IF (n<1.OR.n>20000.OR.x<0.0) THEN
+  IF (ph) THEN
+    h=-1
+  ELSE
+    WRITE (args,argsf) n,x
+    ! standard Fortran 90/95
+    WRITE (*,*) chi2f//args//illeg
+    ! Lahey Fortran 90/95; compiler switch: -trace
+    ! CALL ERROR(chi2f//args//illeg)
+  END IF
+  RETURN
+END IF
+!
+big=HUGE(x)/1000.0
+IF (x<=1.0e-8) THEN
+  IF (pp) p=0.0
+  IF (ps) THEN
+    IF (n==1) THEN
+      s=big
+    ELSE IF (n==2) THEN
+      s=0.5
+    ELSE
+      s=0.0
+    END IF
+  END IF
+  IF (ph) h=0
+  RETURN
+END IF
+!
+IF (x>1.0e+6) THEN
+  IF (ps) s=0.0
+  IF (pp) p=1.0
+  IF (ph) h=0
+  RETURN
+END IF
+g=n
+lh=0
+limit_check=.TRUE.
+xx=DBLE(x)
+dlxx=LOG(xx)
+x2=xx/2.0_dp
+dlx2=LOG(x2)
+gg=DBLE(g)
+g2=gg/2.0_dp
+!
+IF (ps) THEN
+  glg2=lng(g2)
+  dd=(g2-1.0_dp)*dlxx-x2-g2*.6931471805599453_dp-glg2
+  IF (dd>lnh) THEN
+    s=big
+  ELSE
+    IF (dd<=-lnh) THEN
+      s=0.0
+    ELSE
+      dd=EXP(dd)
+      s=REAL(dd)
+    END IF
+  END IF
+  IF (.NOT.pp) RETURN
+END IF
+!
+IF (pp) THEN
+  IF (n<=1000.AND.x>2000.) THEN
+    p=1.0
+    RETURN
+  END IF
+  loop0: DO
+    IF (n>1000) THEN
+      a=LOG(xx/gg)/3.0_dp
+      a=EXP(a)
+      b=2.0_dp/(9.0_dp*gg)
+      c=(a-1.0_dp+b)/SQRT(b)
+      sc=REAL(c)
+      t=1.0/(1.0+.2316419*ABS(sc))
+      lp=1.0-0.3989423*EXP(-sc*sc/2.0)*t*((((1.330274*t-1.821256)*t+1.781478)*t-0.3565638)*t+0.3193815)
+      EXIT loop0
+    END IF
+    k=INT(g2)
+    theta=g2-k*1.0_dp
+    IF (theta<1.0e-8_dp) theta=0.0_dp
+    thp1=theta+1.0_dp
+    IF (theta>0.0_dp) THEN
+      IF (xx<=10.0_dp) THEN
+        ser=x2*(1.0_dp/thp1-x2/(thp1+1.0_dp))
+        j=1
+        cc=REAL(j)
+        loop1: DO it1=3,30
+          xi=REAL(it1)
+          fac=lng(xi)
+          tlog=xi*dlx2-fac-LOG(xi+theta)
+          term=EXP(tlog)
+          term=SIGN(term,cc)
+          ser=ser+term
+          cc=-cc
+          IF (ABS(term)<1.0e-9_dp) EXIT loop1
+          IF (it1==30) THEN
+            lh=1
+            lp=big
+            limit_check=.FALSE.
+            EXIT loop0
+          END IF
+        END DO loop1
+        IF (ser<=0.0_dp) THEN
+          lh=1
+          lp=big
+          limit_check=.FALSE.
+          EXIT loop0
+        END IF
+        gth=lng(thp1)
+        tlog=theta*dlx2+LOG(ser)-gth
+        IF (tlog<=-lnh) THEN
+          t1=0.0
+        ELSE
+          t11=EXP(tlog)
+          t1=REAL(t11)
+        END IF
+      ELSE
+        a2=0.0_dp
+        gth=lng(thp1)
+        DO i=1,25
+          xi=REAL(i)
+          t11=-(13.0_dp*xx)/xi+thp1*LOG(13.0_dp*xx/xi)-gth-LOG(xi)
+          IF (t11>-lnh) THEN
+            t11=EXP(t11)
+            a2=a2+t11
+          END IF
+        END DO
+        a=1.01282051_dp+theta/156.0_dp-xx/312.0_dp
+        b=ABS(a)
+        c=-x2+thp1*dlx2+LOG(b)-gth-3.951243718581427_dp
+        IF (c<=-lnh) THEN
+          c=0.0_dp
+        ELSE
+          IF (a<0.0_dp) THEN
+            c=-EXP(c)
+          ELSE IF (a>0.0_dp) THEN
+            c=EXP(c)
+          ELSE
+            c=0.0_dp
+          END IF
+        END IF
+        c=a2+c
+        t11=1.0_dp-c
+        t1=REAL(t11)
+      END IF
+    ELSE
+      IF (x2<lnh) THEN
+        t11=1.0_dp-EXP(-x2)
+        t1=REAL(t11)
+      ELSE
+        t1=1.0
+      END IF
+    END IF
+    SELECT CASE (n)
+      CASE (1)
+        gth=lng(thp1)
+        dt2=theta*dlxx-x2-thp1*.6931471805599453_dp-gth
+        IF (dt2<=-lnh) THEN
+          lp=t1
+        ELSE
+          dt2=EXP(dt2)
+          t2=REAL(dt2)
+          lp=t1+t2+t2
+        END IF
+      CASE (2,3)
+        lp=t1
+      CASE DEFAULT
+        dt3=0.0_dp
+        DO i3=2,k
+          thpi=theta+i3*1.0_dp
+          gth=lng(thpi)
+          dlt3=thpi*dlx2-dlxx-x2-gth
+          IF (dlt3<-lnh) CYCLE
+          dt3=dt3+EXP(dlt3)
+        END DO
+        t3=REAL(dt3)
+        lp=t1-t3-t3
+    END SELECT
+    EXIT loop0
+  END DO loop0
+  IF (limit_check) THEN
+    IF (lp<0.0) THEN
+      IF (ABS(lp)>1.e-7) THEN
+        lh=1
+        lp=big
+      ELSE
+        lp=0.0
+      END IF
+    ELSE
+      IF (1.0<lp) THEN
+        IF (ABS(1.0-lp)<=1.0e-7) THEN
+          lp=1.0
+        ELSE
+          lh=1
+          lp=big
+        END IF
+      ELSE
+        IF (lp<=1.0e-8) THEN
+          lp=0.0
+        ELSE
+          IF ((1.0-lp)<=1.0e-8) THEN
+            lp=1.0
+          END IF
+        END IF
+      END IF
+    END IF
+  END IF
+  p=lp
+END IF
+!
+IF (lh/=0) THEN
+  IF (ph) THEN
+    h=lh
+  ELSE
+    WRITE (args,argsf) n,x
+    ! standard Fortran 90/95
+    WRITE (*,*) chi2f//args//diver
+    ! Lahey Fortran 90/95; compiler switch: -trace
+    ! CALL ERROR(chi2f//args//diver)
+  END IF
+END IF
+RETURN
+END SUBROUTINE chi2func
+!
+!+ A gamma fÅggvÇny (nem teljes) logaritmusa * Logarithm of the gamma function (subset)
+!
+REAL (dp) FUNCTION lng(x) RESULT (dlng)
+REAL (dp), INTENT (IN) :: x
+REAL (dp) :: z,t,rz2
+z=x
+t=1.0_dp
+DO WHILE (z<18.0_dp)
+  t=t*z
+  z=z+1.0_dp
+END DO
+rz2=1.0_dp/z**2
+dlng =(z-0.5_dp)*LOG(z)-z+0.9189385332046727_dp-LOG(t)+                &
+  (1.0_dp/z)*(0.08333333333333333_dp-(rz2*(0.2777777777777777e-2_dp+   &
+  (rz2*(0.7936507936507936e-3_dp-(rz2*(0.5952380952380952e-3_dp)))))))
+RETURN
+END FUNCTION lng
+!
+END MODULE chi2dist
+
+!#####################################################################
+module program_constants
+   ! Programming constants used throughout the ELOGIT program.
+   ! Unlike most modules, everything here is public.
+   implicit none
+   public
+   ! Define compiler-specific KIND numbers for integers,
+   ! single and double-precision reals to help ensure consistency of
+   ! performance across platforms:
+   integer, parameter :: our_int = selected_int_kind(9), &
+        our_sgle = selected_real_kind(6,37), &
+        our_dble = SELECTED_REAL_KIND(12,80)
+   ! Define UNIT numbers for Fortran I/O:
+   integer, parameter :: ctrl_file_handle = 11, &
+        data_file_handle = 12, names_file_handle = 13, &
+        out_file_handle = 13
+   ! Define maximum lengths for various types of character strings:
+   integer, parameter :: file_name_length = 256, &
+        var_name_length = 8, case_id_length = 8
+   ! Define the maximum line widths for various types of files:
+   integer, parameter :: ctrl_line_width = 80, &
+        data_line_width = 1024, names_line_width = 80, &
+        out_line_width = 70
+   ! Common integer values returned by all functions to indicate
+   ! success or failure:
+   integer(kind=our_int), parameter :: RETURN_SUCCESS = 0, &
+        RETURN_FAIL = -1
+   ! Character strings describing this program:
+   character(len=*), parameter :: &
+        program_name = "ELOGIT", &
+        program_description = &
+        "A simple program for logistic regression analysis", &
+        program_version = "Version 1.0", &
+        program_version_and_date = "Version 1.0 - June, 2004", &
+        program_author = "Written by J.L. Schafer", &
+        program_institution_1 = &
+        "Department of Statistics and The Methodology Center", &
+        program_institution_2 = "The Pennsylvania State University"
+end module program_constants
 
 
 !##################################################################### 
